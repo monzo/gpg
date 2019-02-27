@@ -233,6 +233,53 @@ func (conn *Conn) Keys() ([]Key, error) {
 	return keyList, nil
 }
 
+// KeyGrips returns a list of available keysgrips, indexed by CardID, by querying the card
+func (conn *Conn) KeyGrips() (map[string]string, error) {
+	grips := map[string]string{}
+
+	scan := func(key *Key, line string) error {
+		unfilteredParts := strings.Split(line, " ")
+		parts := []string{}
+		for _, p := range unfilteredParts {
+			if p != "" {
+				parts = append(parts, p)
+			}
+		}
+
+		if len(parts) != 3 {
+			return fmt.Errorf("illegal format for KEYINFO line")
+		}
+
+		// grips[cardID] = keygrip
+		grips[parts[2]] = parts[1]
+
+		return nil
+	}
+
+	respFunc := func(respType, data string) error {
+		if respType != "S" || !strings.HasPrefix(data, "KEYPAIRINFO ") {
+			return nil
+		}
+
+		var key Key
+		if err := scan(&key, data); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+
+	err := conn.Raw(respFunc, "scd LEARN --force")
+	if err != nil {
+		return nil, err
+	}
+
+	return grips, nil
+}
+
 // Raw executes a command and pipes its results to the specified ResponseFunc
 // parameter.
 func (conn *Conn) Raw(f ResponseFunc, format string, a ...interface{}) error {
