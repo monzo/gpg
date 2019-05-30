@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rsa"
 	"encoding/hex"
@@ -119,8 +120,22 @@ func (key Key) Sign(rand io.Reader, msg []byte, opts crypto.SignerOpts) (signatu
 			return internalrsa.SignPSS(rand, priv, pssOpts.Hash, msg, pssOpts)
 		}
 
-		return key.signPKCS1v15(msg, opts.HashFunc())
+		sig, err := key.signPKCS1v15(msg, opts.HashFunc())
+		if err != nil {
+			return nil, err
+		}
 
+		if diff := len(sig) - pub.Size(); diff > 0 {
+			// It seems sometimes the signature can have leading zero bytes such that its over the keysize
+			leadingZeros := bytes.Repeat([]byte{00}, diff)
+			if !bytes.HasPrefix(sig, leadingZeros) {
+				return nil, errors.New("github.com/prep/gpg/agent: signature length too large with nonzero leading bytes")
+			}
+			// We trim the leading zeros
+			sig = bytes.TrimPrefix(sig, leadingZeros)
+		}
+
+		return sig, nil
 	default:
 		return nil, errors.New("github.com/prep/gpg/agent: unknown public key")
 	}
