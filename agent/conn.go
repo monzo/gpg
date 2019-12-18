@@ -233,25 +233,32 @@ func (conn *Conn) Keys() ([]Key, error) {
 	return keyList, nil
 }
 
-// KeyGrips returns a list of available keysgrips, indexed by CardID, by querying the card
+// KeyGrips returns a list of available keygrips, indexed by CardID, by querying the card
 func (conn *Conn) KeyGrips() (map[string]string, error) {
 	grips := map[string]string{}
 
 	scan := func(key *Key, line string) error {
 		unfilteredParts := strings.Split(line, " ")
-		parts := []string{}
+		var parts []string
 		for _, p := range unfilteredParts {
 			if p != "" {
 				parts = append(parts, p)
 			}
 		}
 
-		if len(parts) != 3 {
-			return fmt.Errorf("illegal format for KEYINFO line")
+		if len(parts) < 3 {
+			return fmt.Errorf("illegal format for KEYINFO line: %s", line)
 		}
 
-		// grips[cardID] = keygrip
-		grips[parts[2]] = parts[1]
+		keygrip := parts[1]
+		cardID := parts[2]
+		if strings.HasPrefix(cardID, "OPENPGP.") &&  len(keygrip) == 40 {
+			// grips[cardID] = keygrip
+			grips[cardID] = keygrip
+		} else {
+			fmt.Printf("Warning: card ID or keygrip invalid, skipping: %s", line)
+		}
+
 
 		return nil
 	}
